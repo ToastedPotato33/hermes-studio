@@ -2753,7 +2753,9 @@ async function handleSessionModelCustomSubmit() {
     top: 0;
     bottom: 0;
     width: 1px;
-    background: $border-color;
+    background:
+      linear-gradient($border-color, $border-color) top / 1px calc(50% - 26px) no-repeat,
+      linear-gradient($border-color, $border-color) bottom / 1px calc(50% - 26px) no-repeat;
     transition: background $transition-fast;
     z-index: 1;
   }
@@ -2779,7 +2781,9 @@ async function handleSessionModelCustomSubmit() {
   }
 
   &:hover::after {
-    background: var(--accent-primary);
+    background:
+      linear-gradient(var(--accent-primary), var(--accent-primary)) top / 1px calc(50% - 26px) no-repeat,
+      linear-gradient(var(--accent-primary), var(--accent-primary)) bottom / 1px calc(50% - 26px) no-repeat;
   }
 
   &:hover::before {
