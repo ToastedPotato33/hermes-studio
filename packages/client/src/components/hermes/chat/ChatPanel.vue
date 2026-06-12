@@ -196,14 +196,17 @@ async function handleProfileFilterChange(value: string) {
   await chatStore.loadSessions(chatStore.sessionProfileFilter);
 }
 
-function sortSessionsWithActiveFirst(items: Session[]): Session[] {
+function sortSessionsForSidebar(items: Session[]): Session[] {
   return [...items].sort((a, b) => {
+    const aLive = chatStore.isSessionLive(a.id);
+    const bLive = chatStore.isSessionLive(b.id);
+    if (aLive !== bLive) return aLive ? -1 : 1;
     return (b.updatedAt || 0) - (a.updatedAt || 0);
   });
 }
 
 const pinnedSessions = computed(() =>
-  sortSessionsWithActiveFirst(
+  sortSessionsForSidebar(
     chatStore.sessions.filter((session) =>
       sessionBrowserPrefsStore.isPinned(session.id),
     ),
@@ -211,7 +214,7 @@ const pinnedSessions = computed(() =>
 );
 
 const unpinnedSessions = computed(() =>
-  sortSessionsWithActiveFirst(
+  sortSessionsForSidebar(
     chatStore.sessions.filter(
       (session) => !sessionBrowserPrefsStore.isPinned(session.id),
     ),

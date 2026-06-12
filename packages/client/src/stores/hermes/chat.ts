@@ -640,6 +640,10 @@ export const useChatStore = defineStore('chat', () => {
     if (hasQueue) {
       return
     }
+    if (activeSessionId.value === sessionId) {
+      clearSessionCompletedUnread(sessionId)
+      return
+    }
     const next = new Set(completedUnreadSessions.value)
     next.add(sessionId)
     completedUnreadSessions.value = next
