@@ -21,6 +21,7 @@ const PORT = Number(process.env.HERMES_DESKTOP_PORT) || 8748
 const START_HIDDEN = process.argv.includes('--hidden')
 const QUIT_EXISTING = process.argv.includes('--quit')
 const APP_USER_MODEL_ID = 'com.hermeswebui.studio'
+const RUNTIME_SOURCE_CHECK_VISIBLE_MS = 1000
 type WindowControlAction = 'minimize' | 'toggle-maximize' | 'close'
 
 let mainWindow: BrowserWindow | null = null
@@ -439,7 +440,8 @@ async function bootstrap(source?: RuntimeDownloadSource) {
       if (!selectedSource && !runtimeUrlOverride && !manifestOverride) {
         if (mainWindow) {
           await mainWindow.loadURL(splashHtml(t('runtime.checking')))
-          await delay(350)
+          showWindowWithFade(true)
+          await delay(RUNTIME_SOURCE_CHECK_VISIBLE_MS)
         }
         if (mainWindow) await mainWindow.loadURL(runtimeSourceHtml())
         isBootstrapping = false
