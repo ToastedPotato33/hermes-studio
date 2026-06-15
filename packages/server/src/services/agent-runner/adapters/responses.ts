@@ -121,11 +121,11 @@ function inputSchema(properties: Record<string, unknown> = {}, required: string[
     properties: {
       token: {
         type: 'string',
-        description: 'Optional Hermes Web UI bearer token. Use the current model run token when one is provided in the run instructions.',
+        description: 'Optional Hermes Web UI bearer token. Usually omit this and pass profile so the MCP server can read the temporary profile token.',
       },
       profile: {
         type: 'string',
-        description: 'Optional Hermes profile name for profile-scoped Web UI requests.',
+        description: 'Hermes profile name for profile-scoped Web UI requests and temporary profile token lookup.',
       },
       ...properties,
     },

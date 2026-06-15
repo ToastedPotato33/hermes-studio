@@ -761,7 +761,7 @@ function hermesMcpCommandConfig(): { command: string; args?: string[] } {
   return { command: 'hermes-web-ui-mcp' }
 }
 
-function hermesMcpServerConfig(): { command: string; args?: string[]; env: Record<string, string> } {
+function hermesMcpServerConfig(profile: string): { command: string; args?: string[]; env: Record<string, string> } {
   const appHome = getWebUiHome()
   return {
     ...hermesMcpCommandConfig(),
@@ -769,18 +769,19 @@ function hermesMcpServerConfig(): { command: string; args?: string[]; env: Recor
       HERMES_WEB_UI_URL: `http://127.0.0.1:${process.env.PORT || '8648'}`,
       HERMES_WEB_UI_HOME: appHome,
       HERMES_WEBUI_STATE_DIR: appHome,
+      HERMES_WEB_UI_PROFILE: profile,
       HERMES_MCP_SERVER_NAME: 'hermes-studio-mcp',
       [HERMES_MCP_MANAGED_ENV_KEY]: '1',
     },
   }
 }
 
-function claudeMcpConfigJson(): string {
-  return `${JSON.stringify({ mcpServers: { [HERMES_MCP_SERVER_NAME]: hermesMcpServerConfig() } }, null, 2)}\n`
+function claudeMcpConfigJson(profile: string): string {
+  return `${JSON.stringify({ mcpServers: { [HERMES_MCP_SERVER_NAME]: hermesMcpServerConfig(profile) } }, null, 2)}\n`
 }
 
-function codexMcpConfigToml(): string {
-  const server = hermesMcpServerConfig()
+function codexMcpConfigToml(profile: string): string {
+  const server = hermesMcpServerConfig(profile)
   const lines = [
     `[mcp_servers.${HERMES_MCP_SERVER_NAME}]`,
     `command = ${tomlString(server.command)}`,
@@ -1513,7 +1514,7 @@ export async function prepareCodingAgentLaunch(id: string, input: CodingAgentLau
     }
     env = settings.env
     await writeScopedFile('settings', `${JSON.stringify(settings, null, 2)}\n`)
-    await writeScopedFile('mcp', claudeMcpConfigJson())
+    await writeScopedFile('mcp', claudeMcpConfigJson(scope.profile))
     await writeScopedFile('prompt', hermesPromptDocument())
 
     const settingsPath = join(rootDir, 'settings.json')
@@ -1563,7 +1564,7 @@ export async function prepareCodingAgentLaunch(id: string, input: CodingAgentLau
       'requires_openai_auth = false',
       ...(codexApiKey ? [`experimental_bearer_token = ${JSON.stringify(codexApiKey)}`] : []),
       '',
-      codexMcpConfigToml(),
+      codexMcpConfigToml(scope.profile),
     ].join('\n')
     const catalog = buildCodexModelCatalog({
       profile: scope.profile,

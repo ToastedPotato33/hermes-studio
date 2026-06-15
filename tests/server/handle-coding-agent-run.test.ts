@@ -7,7 +7,7 @@ const managerMock = vi.hoisted(() => ({
 }))
 const startCodingAgentRunMock = vi.hoisted(() => vi.fn())
 const sendCodingAgentRunInputMock = vi.hoisted(() => vi.fn())
-const buildModelRunAuthPromptMock = vi.hoisted(() => vi.fn(async () => []))
+const writeModelRunProfileTokenMock = vi.hoisted(() => vi.fn(async () => undefined))
 const getSystemPromptMock = vi.hoisted(() => vi.fn(() => 'system prompt'))
 
 vi.mock('../../packages/server/src/services/agent-runner/coding-agent-run-manager', () => ({
@@ -20,7 +20,7 @@ vi.mock('../../packages/server/src/services/coding-agents', () => ({
 }))
 
 vi.mock('../../packages/server/src/services/hermes/run-chat/model-run-prompt', () => ({
-  buildModelRunAuthPrompt: buildModelRunAuthPromptMock,
+  writeModelRunProfileToken: writeModelRunProfileTokenMock,
 }))
 
 vi.mock('../../packages/server/src/lib/llm-prompt', () => ({
@@ -30,7 +30,7 @@ vi.mock('../../packages/server/src/lib/llm-prompt', () => ({
 describe('handleCodingAgentRun', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    buildModelRunAuthPromptMock.mockResolvedValue([])
+    writeModelRunProfileTokenMock.mockResolvedValue(undefined)
     getSystemPromptMock.mockReturnValue('system prompt')
   })
 
@@ -139,14 +139,16 @@ describe('handleCodingAgentRun', () => {
     expect(sendCodingAgentRunInputMock).toHaveBeenCalledWith('session-1', 'hello claude', 'system prompt')
   })
 
-  it('passes per-run MCP auth prompt separately from coding-agent input for authenticated users', async () => {
+  it('keeps profile token handling separate from the system prompt for authenticated users', async () => {
     managerMock.runIdForSession.mockReturnValue('agent-session-1')
     managerMock.isSessionLaunchCompatible.mockReturnValue(true)
     sendCodingAgentRunInputMock.mockResolvedValue({ runId: 'agent-session-1' })
-    buildModelRunAuthPromptMock.mockResolvedValue([
-      '[Current Hermes profile: default]',
-      '[Current Hermes Web UI model run token: run-token]',
-    ])
+    writeModelRunProfileTokenMock.mockResolvedValue(undefined)
+    getSystemPromptMock.mockReturnValue([
+      'system prompt',
+      'Hermes Studio MCP usage: call hermes_api_openapi_get before calling unfamiliar Web UI endpoints.',
+      'Use hermes_api_request with method, relative path, and JSON body/query fields.',
+    ].join('\n'))
 
     const { handleCodingAgentRun } = await import('../../packages/server/src/services/hermes/run-chat/handle-coding-agent-run')
     const state = {
@@ -169,16 +171,20 @@ describe('handleCodingAgentRun', () => {
       coding_agent_id: 'codex',
     }, 'default', sessionMap as any)
 
-    expect(buildModelRunAuthPromptMock).toHaveBeenCalledWith(
+    expect(writeModelRunProfileTokenMock).toHaveBeenCalledWith(
       { id: 1, username: 'admin', role: 'super_admin' },
       'default',
     )
     expect(sendCodingAgentRunInputMock).toHaveBeenCalledWith(
       'session-1',
       'hello codex',
-      expect.stringContaining('system prompt\n[Current Hermes profile: default]\n[Current Hermes Web UI model run token: run-token]'),
+      expect.stringContaining('system prompt\nHermes Studio MCP usage'),
     )
     const prompt = sendCodingAgentRunInputMock.mock.calls.at(-1)?.[2]
+    expect(prompt).toContain('hermes_api_request')
+    expect(prompt).not.toContain('run-token')
+    expect(prompt).not.toContain('[Current Hermes profile:')
+    expect(prompt).not.toContain('Current Hermes Web UI model run token')
     expect(prompt).not.toContain('Hermes Web UI LAN device capabilities are MCP tools')
     expect(prompt).not.toContain('list_mcp_resources')
     expect(prompt).not.toContain('mcp__hermes-studio__')

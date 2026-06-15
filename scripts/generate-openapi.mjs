@@ -14,14 +14,15 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const rootDir = resolve(__dirname, '..')
 const routesDir = join(rootDir, 'packages/server/src/routes')
 const controllersDir = join(rootDir, 'packages/server/src/controllers')
+const packageJson = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8'))
 
 // OpenAPI template
 const openapi = {
   openapi: '3.0.3',
   info: {
-    title: 'Hermes Web UI API',
-    description: 'BFF server API for Hermes Web UI — chat sessions, scheduled jobs, platform channels, model management, skills, memory, logs, file browser, group chat, and terminal.',
-    version: '0.5.9',
+    title: 'Hermes Studio API',
+    description: 'Hermes Studio API — chat sessions, scheduled jobs, platform channels, model management, skills, memory, logs, file browser, group chat, and terminal.',
+    version: packageJson.version,
   },
   servers: [
     { url: 'http://localhost:8648', description: 'Local development' },
@@ -58,7 +59,7 @@ const tagMappings = {
   'routes/hermes/nous-auth.ts': { name: 'Nous Auth', description: 'Nous Research OAuth' },
   'routes/hermes/copilot-auth.ts': { name: 'Copilot Auth', description: 'GitHub Copilot OAuth' },
   'routes/hermes/group-chat.ts': { name: 'Group Chat', description: 'Group chat management' },
-  'routes/hermes/chat-run.ts': { name: 'Chat', description: 'Chat run and streaming' },
+  'routes/hermes/chat-run.ts': { name: 'Chat Run', description: 'Chat run HTTP and Socket.IO bridge operations' },
   'routes/hermes/config.ts': { name: 'Config', description: 'Configuration management' },
   'routes/hermes/files.ts': { name: 'Files', description: 'Hermes file browser' },
   'routes/hermes/download.ts': { name: 'Download', description: 'File download' },
@@ -69,6 +70,7 @@ const tagMappings = {
   'routes/upload.ts': { name: 'Upload', description: 'File upload' },
   'routes/webhook.ts': { name: 'Webhook', description: 'Incoming webhooks' },
   'routes/auth.ts': { name: 'Auth', description: 'Authentication management' },
+  'routes/api-docs.ts': { name: 'API Docs', description: 'OpenAPI route catalog' },
 }
 
 // Extract route definitions from route files
@@ -340,31 +342,6 @@ openapi.paths['/api/hermes/{*any}'] = {
   },
 }
 
-openapi.paths['/v1/{*any}'] = {
-  'get': {
-    tags: ['Proxy'],
-    summary: 'Proxy to upstream Hermes v1 API',
-    description: 'Forwards /v1/* requests to upstream Hermes gateway. Supports all upstream v1 endpoints.',
-    operationId: 'proxyV1',
-    responses: {
-      '200': { description: 'Proxied response from upstream' },
-      '401': { $ref: '#/components/responses/Unauthorized' },
-      '502': { description: 'Proxy failure' },
-    },
-  },
-  'post': {
-    tags: ['Proxy'],
-    summary: 'Proxy to upstream Hermes v1 API',
-    description: 'Forwards /v1/* requests to upstream Hermes gateway. Supports all upstream v1 endpoints.',
-    operationId: 'proxyV1Post',
-    responses: {
-      '200': { description: 'Proxied response from upstream' },
-      '401': { $ref: '#/components/responses/Unauthorized' },
-      '502': { description: 'Proxy failure' },
-    },
-  },
-}
-
 // Add Proxy tag
 if (!openapi.tags.find(t => t.name === 'Proxy')) {
   openapi.tags.push({ name: 'Proxy', description: 'Gateway proxy to upstream Hermes API' })
@@ -461,6 +438,161 @@ Object.keys(openapi.paths).sort().forEach(key => {
 openapi.paths = sortedPaths
 
 // Add special endpoints after sorting
+// Add non-streaming Chat Run HTTP wrapper endpoint
+openapi.paths['/api/chat-run/runs'] = {
+  post: {
+    tags: ['Chat Run'],
+    summary: 'Run chat and wait for completion',
+    description: 'Starts a Hermes Studio chat run through the chat-run transport and waits for a terminal result. Use this from HTTP/MCP callers that cannot consume Socket.IO streams.',
+    operationId: 'runChatOnce',
+    security: [{ BearerAuth: [] }],
+    requestBody: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            required: ['input'],
+            properties: {
+              input: {
+                oneOf: [
+                  { type: 'string' },
+                  {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      additionalProperties: true,
+                    },
+                  },
+                ],
+                description: 'User message text or content blocks.',
+              },
+              session_id: {
+                type: 'string',
+                description: 'Optional session id. Required for CLI/coding-agent style runs and recommended for all chat runs.',
+              },
+              profile: {
+                type: 'string',
+                description: 'Hermes Studio profile name. Defaults to the authenticated request profile or default.',
+              },
+              provider: {
+                type: 'string',
+                description: 'Model provider key to use for this run, for example openai, anthropic, deepseek, or a configured custom provider key.',
+              },
+              model: {
+                type: 'string',
+                description: 'Model id to use for this run, for example gpt-5.1 or deepseek-v4-pro.',
+              },
+              model_groups: {
+                type: 'array',
+                description: 'Optional provider/model fallback groups.',
+                items: {
+                  type: 'object',
+                  required: ['provider', 'models'],
+                  properties: {
+                    provider: { type: 'string' },
+                    models: { type: 'array', items: { type: 'string' } },
+                  },
+                },
+              },
+              source: {
+                type: 'string',
+                enum: ['api_server', 'cli', 'coding_agent', 'global_agent'],
+                description: 'Run backend source. Use cli for Hermes bridge runs, coding_agent for Claude Code/Codex, api_server for direct API-server runs, or global_agent for global-agent sessions.',
+              },
+              session_source: {
+                type: 'string',
+                enum: ['global_agent'],
+                description: 'Marks a coding-agent or bridge session as launched from the global agent.',
+              },
+              instructions: {
+                type: 'string',
+                description: 'Optional extra run instructions appended after the system prompt.',
+              },
+              workspace: {
+                type: 'string',
+                nullable: true,
+                description: 'Optional current working directory for the run.',
+              },
+              reasoning_effort: {
+                type: 'string',
+                description: 'Optional per-run reasoning effort override.',
+              },
+              coding_agent_id: {
+                type: 'string',
+                enum: ['claude-code', 'codex'],
+                description: 'Coding agent id when source is coding_agent.',
+              },
+              agent_id: {
+                type: 'string',
+                enum: ['claude-code', 'codex'],
+                description: 'Alias for coding_agent_id.',
+              },
+              mode: {
+                type: 'string',
+                enum: ['scoped', 'global'],
+                description: 'Coding-agent launch mode.',
+              },
+              baseUrl: {
+                type: 'string',
+                description: 'Optional provider base URL for coding-agent runs.',
+              },
+              apiKey: {
+                type: 'string',
+                description: 'Optional provider API key for coding-agent runs.',
+              },
+              apiMode: {
+                type: 'string',
+                enum: ['chat_completions', 'codex_responses', 'anthropic_messages'],
+                description: 'Optional provider wire API mode for coding-agent runs.',
+              },
+              timeout_ms: {
+                type: 'integer',
+                minimum: 1,
+                maximum: 1800000,
+                default: 300000,
+                description: 'Maximum time to wait for run.completed or run.failed.',
+              },
+              include_events: {
+                type: 'boolean',
+                default: false,
+                description: 'Include recorded run events in the HTTP response.',
+              },
+            },
+            additionalProperties: true,
+          },
+        },
+      },
+    },
+    responses: {
+      '200': {
+        description: 'Run completed',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                ok: { type: 'boolean', example: true },
+                status: { type: 'string', example: 'completed' },
+                session_id: { type: 'string' },
+                run_id: { type: 'string' },
+                output: { type: 'string' },
+                reasoning: { type: 'string' },
+                events: { type: 'array', items: { type: 'object', additionalProperties: true } },
+              },
+            },
+          },
+        },
+      },
+      '400': { $ref: '#/components/responses/BadRequest' },
+      '401': { $ref: '#/components/responses/Unauthorized' },
+      '409': { description: 'Run requires approval or clarification' },
+      '500': { description: 'Run failed' },
+      '504': { description: 'Run timed out' },
+    },
+  },
+}
+
 // Add proxy endpoints that forward to upstream Hermes API
 openapi.paths['/api/hermes/{*any}'] = {
   'get': {
@@ -501,31 +633,6 @@ openapi.paths['/api/hermes/{*any}'] = {
     summary: 'Proxy to upstream Hermes API',
     description: 'Forwards unmatched /api/hermes/* requests to upstream Hermes gateway. Supports all upstream endpoints.',
     operationId: 'proxyHermesDelete',
-    responses: {
-      '200': { description: 'Proxied response from upstream' },
-      '401': { $ref: '#/components/responses/Unauthorized' },
-      '502': { description: 'Proxy failure' },
-    },
-  },
-}
-
-openapi.paths['/v1/{*any}'] = {
-  'get': {
-    tags: ['Proxy'],
-    summary: 'Proxy to upstream Hermes v1 API',
-    description: 'Forwards /v1/* requests to upstream Hermes gateway. Supports all upstream v1 endpoints.',
-    operationId: 'proxyV1',
-    responses: {
-      '200': { description: 'Proxied response from upstream' },
-      '401': { $ref: '#/components/responses/Unauthorized' },
-      '502': { description: 'Proxy failure' },
-    },
-  },
-  'post': {
-    tags: ['Proxy'],
-    summary: 'Proxy to upstream Hermes v1 API',
-    description: 'Forwards /v1/* requests to upstream Hermes gateway. Supports all upstream v1 endpoints.',
-    operationId: 'proxyV1Post',
     responses: {
       '200': { description: 'Proxied response from upstream' },
       '401': { $ref: '#/components/responses/Unauthorized' },

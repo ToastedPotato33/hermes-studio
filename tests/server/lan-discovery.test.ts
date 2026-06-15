@@ -186,11 +186,11 @@ describe('LAN discovery', () => {
 
     expect(mcpSource).toContain("name: 'hermes_lan_devices_list'")
     expect(mcpSource).toContain('online status')
-    expect(mcpSource).toContain('current model run token')
+    expect(mcpSource).toContain('temporary profile token')
     expect(mcpSource).toContain("'X-Hermes-Profile': profile")
     expect(mcpSource).toContain('token: args.token')
     expect(mcpSource).toContain('profile: args.profile')
-    expect(mcpSource).toContain('allowTokenFile: false')
+    expect(mcpSource).toContain("join(appHome(), 'profiles', segment, '.model-run-token')")
     expect(mcpSource).toContain("name: 'hermes_lan_terminal_list'")
     expect(mcpSource).toContain('/terminals`, withAuthArgs(args))')
   })

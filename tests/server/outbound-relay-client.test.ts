@@ -83,7 +83,7 @@ describe('outbound relay client', () => {
 
     socketHandlers.get('connect')?.()
     expect(mockSocket.emit).toHaveBeenCalledWith('relay.ready', {
-      capabilities: ['http.request.v1', 'socket.chat-run.v1'],
+      capabilities: ['http.request', 'socket.chat-run'],
       instanceId: 'studio-1',
     })
   })

@@ -8,6 +8,7 @@ import { updateRoutes } from './update'
 import { authPublicRoutes, authProtectedRoutes } from './auth'
 import { devicePublicRoutes, deviceRoutes } from './devices'
 import { codingAgentRoutes } from './coding-agents'
+import { apiDocsRoutes } from './api-docs'
 import { claudeCodeProxyRoutes } from './claude-code-proxy'
 import { codexProxyRoutes } from './codex-proxy'
 
@@ -38,6 +39,7 @@ import { sttProtectedRoutes } from './hermes/stt'
 import { mediaRoutes } from './hermes/media'
 import { proxyRoutes, proxyMiddleware } from './hermes/proxy'
 import { groupChatRoutes, setGroupChatServer } from './hermes/group-chat'
+import { chatRunRoutes } from './hermes/chat-run'
 import { performanceMonitorRoutes } from './hermes/performance-monitor'
 import { mcpRoutes } from './hermes/mcp'
 import { runtimeVersionRoutes } from './hermes/runtime-versions'
@@ -57,6 +59,7 @@ export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, ne
   app.use(claudeCodeProxyRoutes.routes())
   app.use(codexProxyRoutes.routes())
   app.use(ttsRoutes.routes())
+  app.use(apiDocsRoutes.routes())
 
   // --- Auth middleware: all routes below require authentication ---
   authMiddleware.forEach((middleware) => app.use(middleware))
@@ -83,6 +86,7 @@ export function registerRoutes(app: any, authMiddleware: Array<(ctx: Context, ne
   app.use(anthropicAuthRoutes.routes())
   app.use(geminiAuthRoutes.routes())
   app.use(weixinRoutes.routes())
+  app.use(chatRunRoutes.routes())
   app.use(groupChatRoutes.routes())       // Must be before proxy
   app.use(fileRoutes.routes())              // Must be before proxy (proxy catch-all matches everything)
   app.use(downloadRoutes.routes())          // Must be before proxy

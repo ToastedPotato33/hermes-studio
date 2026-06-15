@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, readFileSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getSystemPromptMock = vi.fn()
 const getSessionMock = vi.fn()
@@ -36,6 +39,7 @@ const recordBridgeToolStartedMock = vi.fn()
 const recordBridgeToolCompletedMock = vi.fn()
 const resolveBridgeRunModelConfigMock = vi.fn()
 const issueModelRunJwtMock = vi.fn(async () => 'model-run-token')
+const homes: string[] = []
 
 vi.mock('../../packages/server/src/lib/llm-prompt', () => ({
   getSystemPrompt: getSystemPromptMock,
@@ -121,6 +125,9 @@ function makeState() {
 
 describe('bridge run final context usage', () => {
   beforeEach(() => {
+    const home = mkdtempSync(join(tmpdir(), 'hermes-bridge-run-token-'))
+    homes.push(home)
+    process.env.HERMES_WEB_UI_HOME = home
     vi.clearAllMocks()
     getSystemPromptMock.mockReturnValue('system prompt')
     issueModelRunJwtMock.mockResolvedValue('model-run-token')
@@ -146,6 +153,11 @@ describe('bridge run final context usage', () => {
       const contextTokens = contextTokensWithCachedOverheadMock(state, messageTokens)
       return updateContextTokenUsageMock(sid, state, emit, contextTokens, usage)
     })
+  })
+
+  afterEach(() => {
+    delete process.env.HERMES_WEB_UI_HOME
+    for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true })
   })
 
   it('refreshes full context tokens when a bridge run completes', async () => {
@@ -184,7 +196,7 @@ describe('bridge run final context usage', () => {
     expect(bridge.contextEstimate).toHaveBeenCalledWith(
       'session-1',
       [],
-      expect.stringContaining('[Current Hermes profile: default]'),
+      expect.not.stringContaining('[Current Hermes profile:'),
       'default',
       { model: 'gpt-test', provider: 'openai' },
     )
@@ -203,7 +215,7 @@ describe('bridge run final context usage', () => {
     }))
   })
 
-  it('adds a super admin one hour model run token to bridge instructions for super admin runs', async () => {
+  it('stores a super admin model-run token for the profile without adding it to bridge instructions', async () => {
     const emit = vi.fn()
     const nsp = makeNamespace(emit)
     const socket = makeSocket()
@@ -239,12 +251,14 @@ describe('bridge run final context usage', () => {
 
     const instructions = bridge.contextEstimate.mock.calls[0][2]
     expect(issueModelRunJwtMock).toHaveBeenCalledWith({ id: 1, username: 'admin', role: 'super_admin' })
-    expect(instructions).toContain('[Current Hermes Web UI model run token: model-run-token]')
-    expect(instructions).toContain('pass the current Hermes profile as the profile argument')
-    expect(instructions).toContain('token argument')
+    expect(readFileSync(join(process.env.HERMES_WEB_UI_HOME || '', 'profiles', 'default', '.model-run-token'), 'utf-8').trim()).toBe('model-run-token')
+    expect(instructions).not.toContain('[Current Hermes profile:')
+    expect(instructions).not.toContain('pass the current Hermes profile as the profile argument')
+    expect(instructions).not.toContain('model-run-token')
+    expect(instructions).not.toContain('Current Hermes Web UI model run token')
+    expect(instructions).not.toContain('token argument')
     expect(instructions).not.toContain('list_mcp_resources')
     expect(instructions).not.toContain('mcp__hermes-studio__')
-    expect(instructions).toContain('expires in 1 hour')
   })
 
   it('creates global-agent bridge sessions with source global_agent', async () => {

@@ -1,13 +1,34 @@
+import { mkdir, writeFile } from 'fs/promises'
+import { dirname, join } from 'path'
+import { getWebUiHome } from '../../../config'
 import { issueModelRunJwt, type AuthenticatedUser } from '../../../middleware/user-auth'
 
-export async function buildModelRunAuthPrompt(user: AuthenticatedUser | undefined, profile: string): Promise<string[]> {
-  if (!user) return []
+const MODEL_RUN_TOKEN_FILE = '.model-run-token'
+
+function normalizeProfileSegment(profile: string): string {
+  const sanitized = String(profile || '').trim().replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') || 'default'
+  if (sanitized === '.' || sanitized === '..' || sanitized.length > 128) {
+    const err = new Error('Invalid profile')
+    ;(err as any).status = 400
+    throw err
+  }
+  return sanitized
+}
+
+export function modelRunProfileTokenPath(profile: string): string {
+  return join(getWebUiHome(), 'profiles', normalizeProfileSegment(profile), MODEL_RUN_TOKEN_FILE)
+}
+
+export async function writeModelRunProfileToken(user: AuthenticatedUser | undefined, profile: string): Promise<void> {
+  if (!user) return
   const token = await issueModelRunJwt(user)
-  return [
-    `[Current Hermes profile: ${profile}]`,
-    `[Current Hermes Web UI model run token: ${token}]`,
-    'When calling Hermes Web UI MCP tools, pass the current Hermes profile as the profile argument and the current Hermes Web UI model run token as the token argument.',
-    'When calling Hermes Web UI HTTP endpoints from tools or skills, use Authorization: Bearer <current model run token> and X-Hermes-Profile: <current Hermes profile>.',
-    'The current Hermes Web UI model run token expires in 1 hour.',
-  ]
+  const tokenPath = modelRunProfileTokenPath(profile)
+  const mkdirOptions: any = { recursive: true }
+  const writeOptions: any = {}
+  if (process.platform !== 'win32') {
+    mkdirOptions.mode = 0o700
+    writeOptions.mode = 0o600
+  }
+  await mkdir(dirname(tokenPath), mkdirOptions)
+  await writeFile(tokenPath, `${token}\n`, writeOptions)
 }

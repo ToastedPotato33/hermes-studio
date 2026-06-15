@@ -357,7 +357,7 @@ export class OutboundRelayClient {
     this.socket.on('connect', () => {
       logger.info({ relayUrl: this.redactedRelayUrl() }, '[outbound-relay] connected')
       this.socket?.emit('relay.ready', {
-        capabilities: ['http.request.v1', 'socket.chat-run.v1'],
+        capabilities: ['http.request', 'socket.chat-run'],
         instanceId: this.instanceId || undefined,
       })
     })

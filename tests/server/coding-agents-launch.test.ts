@@ -211,6 +211,7 @@ describe('coding agent launch preparation', () => {
         HERMES_WEB_UI_URL: 'http://127.0.0.1:8648',
         HERMES_WEB_UI_HOME: home,
         HERMES_WEBUI_STATE_DIR: home,
+        HERMES_WEB_UI_PROFILE: 'default',
         HERMES_MCP_SERVER_NAME: 'hermes-studio-mcp',
         HERMES_WEB_UI_MANAGED_MCP: '1',
       },
@@ -320,6 +321,7 @@ describe('coding agent launch preparation', () => {
     expect(config).toContain(`args = ["${join(process.cwd(), 'bin/hermes-web-ui-mcp.mjs')}"]`)
     expect(config).toContain(`env = { HERMES_WEB_UI_URL = "http://127.0.0.1:8648", HERMES_WEB_UI_HOME = "${home}"`)
     expect(config).toContain('HERMES_WEBUI_STATE_DIR = "')
+    expect(config).toContain('HERMES_WEB_UI_PROFILE = "default"')
     expect(config).toContain('HERMES_MCP_SERVER_NAME = "hermes-studio-mcp"')
     expect(config).toContain('HERMES_WEB_UI_MANAGED_MCP = "1"')
 
