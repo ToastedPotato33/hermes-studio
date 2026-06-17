@@ -433,6 +433,13 @@ function getPreviewInstallEnv() {
   }
 }
 
+function getPreviewMcpEnv() {
+  return {
+    HERMES_WEB_UI_MCP_NODE: process.env.HERMES_WEB_UI_MCP_NODE?.trim() || process.env.HERMES_AGENT_NODE?.trim() || process.execPath,
+    HERMES_WEB_UI_MCP_BIN: join(getPreviewDir(), 'bin', 'hermes-web-ui-mcp.mjs'),
+  }
+}
+
 function readLogTail(path: string, maxChars = 24_000): string {
   if (!existsSync(path)) return ''
   const raw = readFileSync(path, 'utf-8')
@@ -769,6 +776,64 @@ function patchPreviewSidebar(source: string) {
   return next
 }
 
+function patchPreviewCodingAgentsMcpConfig(source: string) {
+  if (source.includes('function bundledMcpNodePath()')) return source
+  return source.replace(
+    [
+      'function hermesMcpCommandConfig(): { command: string; args?: string[] } {',
+      "  if (isDesktopRuntime()) return { command: 'hermes-studio-mcp' }",
+      '  const script = bundledMcpScriptPath()',
+      '  if (script) return { command: process.execPath, args: [script] }',
+      "  return { command: 'hermes-web-ui-mcp' }",
+      '}',
+    ].join('\n'),
+    [
+      'function bundledMcpNodePath(): string {',
+      '  return process.env.HERMES_WEB_UI_MCP_NODE?.trim() || process.env.HERMES_AGENT_NODE?.trim() || process.execPath',
+      '}',
+      '',
+      'function hermesMcpCommandConfig(): { command: string; args?: string[] } {',
+      '  const script = bundledMcpScriptPath()',
+      '  if (script) return { command: bundledMcpNodePath(), args: [script] }',
+      "  if (isDesktopRuntime()) return { command: 'hermes-studio-mcp' }",
+      "  return { command: 'hermes-web-ui-mcp' }",
+      '}',
+    ].join('\n'),
+  )
+}
+
+function patchPreviewStudioMcpAutoinject(source: string) {
+  if (source.includes('function bundledMcpNodePath()')) return source
+  return source.replace(
+    [
+      'function managedCommandConfig(): Record<string, unknown> {',
+      '  if (isDesktopRuntime()) {',
+      "    return { command: 'hermes-studio-mcp' }",
+      '  }',
+      '',
+      '  const bundledScript = bundledMcpScriptPath()',
+      '  if (bundledScript) {',
+      '    return { command: process.execPath, args: [bundledScript] }',
+      '  }',
+    ].join('\n'),
+    [
+      'function bundledMcpNodePath(): string {',
+      '  return process.env.HERMES_WEB_UI_MCP_NODE?.trim() || process.env.HERMES_AGENT_NODE?.trim() || process.execPath',
+      '}',
+      '',
+      'function managedCommandConfig(): Record<string, unknown> {',
+      '  const bundledScript = bundledMcpScriptPath()',
+      '  if (bundledScript) {',
+      '    return { command: bundledMcpNodePath(), args: [bundledScript] }',
+      '  }',
+      '',
+      '  if (isDesktopRuntime()) {',
+      "    return { command: 'hermes-studio-mcp' }",
+      '  }',
+    ].join('\n'),
+  )
+}
+
 function applyPreviewRuntimePatch() {
   const previewDir = getPreviewDir()
   const packagePath = getPreviewPackagePath()
@@ -795,6 +860,8 @@ function applyPreviewRuntimePatch() {
   patchFileIfExists(join(previewDir, 'packages/client/src/api/hermes/kanban.ts'), patchPreviewWebSocketClient)
   patchFileIfExists(join(previewDir, 'packages/client/src/api/client.ts'), patchPreviewApiClient)
   patchFileIfExists(join(previewDir, 'packages/client/src/components/layout/AppSidebar.vue'), patchPreviewSidebar)
+  patchFileIfExists(join(previewDir, 'packages/server/src/services/coding-agents.ts'), patchPreviewCodingAgentsMcpConfig)
+  patchFileIfExists(join(previewDir, 'packages/server/src/services/hermes/studio-mcp-autoinject.ts'), patchPreviewStudioMcpAutoinject)
 }
 
 function assertTagRef(tag: unknown): string {
@@ -1201,6 +1268,7 @@ export async function startPreview(ctx: any) {
         HERMES_WEBUI_STATE_DIR: getPreviewHomeDir(),
         HERMES_AGENT_BRIDGE_ENDPOINT: getPreviewAgentBridgeEndpoint(),
         HERMES_AGENT_BRIDGE_WORKER_PORT_BASE: String(PREVIEW_AGENT_BRIDGE_WORKER_PORT_BASE),
+        ...getPreviewMcpEnv(),
         AUTH_TOKEN: '',
         HERMES_WEB_UI_BACKEND_PORT: String(PREVIEW_BACKEND_PORT),
         HERMES_WEB_UI_FRONTEND_PORT: String(PREVIEW_FRONTEND_PORT),

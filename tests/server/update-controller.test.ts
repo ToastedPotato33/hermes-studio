@@ -364,4 +364,32 @@ describe('update controller', () => {
     )
   })
 
+  it('passes explicit MCP node and script paths to preview dev servers', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { startPreview, mocks } = await loadUpdateController()
+    const ctx: any = {
+      ...createMockCtx(),
+      request: { body: {} },
+    }
+
+    await startPreview(ctx)
+    await Promise.resolve()
+
+    expect(ctx.status).toBe(202)
+    await vi.waitFor(() => {
+      expect(mocks.spawn).toHaveBeenCalled()
+    })
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({
+        env: expect.objectContaining({
+          HERMES_WEB_UI_MCP_NODE: process.execPath,
+          HERMES_WEB_UI_MCP_BIN: expect.stringContaining(join('hermes-web-ui-pereview', 'bin', 'hermes-web-ui-mcp.mjs')),
+        }),
+      }),
+    )
+  })
+
 })
