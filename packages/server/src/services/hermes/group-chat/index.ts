@@ -1066,6 +1066,7 @@ export class GroupChatServer {
                 senderId: savedMsg.senderId,
                 timestamp: savedMsg.timestamp,
                 mentionDepth,
+                senderKind: isAgentReply ? 'agent' : 'user',
             }).catch((err) => {
                 logger.error(`[GroupChat] processMentions error: ${err.message}`)
             })
