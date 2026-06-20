@@ -2716,6 +2716,26 @@ void markMcuInteraction(const String &interactionId, const String &status, const
   oledDirty = true;
 }
 
+bool shouldPreserveMcuToolStatus(const String &interactionId) {
+  return mcuInteractionStatus == F("tool") && mcuToolName.length() > 0 &&
+         (interactionId.length() == 0 || mcuInteractionId.length() == 0 || interactionId == mcuInteractionId);
+}
+
+void touchMcuInteraction(const String &interactionId) {
+  if (interactionId.length() > 0) mcuInteractionId = interactionId;
+  mcuInteractionActive = true;
+  mcuInteractionUpdatedAtMs = millis();
+  oledDirty = true;
+}
+
+void markMcuAudioSpeaking(const String &interactionId) {
+  if (shouldPreserveMcuToolStatus(interactionId)) {
+    touchMcuInteraction(interactionId);
+    return;
+  }
+  markMcuInteraction(interactionId, F("speaking"), F(""));
+}
+
 void finishMcuAudio(bool interrupted) {
   if (!mcuAudioPlaying) return;
   String json;
@@ -2746,7 +2766,7 @@ void startNextMcuAudio() {
   mcuAudioPlaying = true;
   mcuAudioStartedAtMs = millis();
   mcuAudioDurationMs = mcuAudioDurationFor(mcuCurrentAudio);
-  markMcuInteraction(mcuCurrentAudio.interactionId, F("speaking"), F(""));
+  markMcuAudioSpeaking(mcuCurrentAudio.interactionId);
 
   String json;
   json.reserve(260);
@@ -2794,7 +2814,7 @@ bool enqueueMcuAudio(const McuAudioSegment &segment) {
   int tail = (mcuAudioHead + mcuAudioCount) % kMaxMcuAudioQueue;
   mcuAudioQueue[tail] = segment;
   ++mcuAudioCount;
-  markMcuInteraction(segment.interactionId, F("speaking"), F(""));
+  markMcuAudioSpeaking(segment.interactionId);
   startNextMcuAudio();
   return true;
 }
@@ -2804,12 +2824,16 @@ void handleMcuInteractionStatus(uint8_t clientId, const String &message) {
   String status = jsonStringValue(message, F("status"));
   String text = jsonStringValue(message, F("text"));
   if (status.length() == 0) status = F("thinking");
-  if (status != F("tool")) {
-    mcuToolName = "";
-    mcuToolPreview = "";
-    mcuToolStatus = "";
+  if (status == F("speaking") && shouldPreserveMcuToolStatus(interactionId)) {
+    touchMcuInteraction(interactionId);
+  } else {
+    if (status != F("tool")) {
+      mcuToolName = "";
+      mcuToolPreview = "";
+      mcuToolStatus = "";
+    }
+    markMcuInteraction(interactionId, status, text);
   }
-  markMcuInteraction(interactionId, status, text);
   sendWsJson(clientId, String(F("{\"type\":\"interaction.status.ack\",\"ok\":true,\"status\":\"")) +
                          escapeJson(status) + F("\"}"));
   broadcastMcuStatus();
