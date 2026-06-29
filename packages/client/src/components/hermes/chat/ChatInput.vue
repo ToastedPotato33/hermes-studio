@@ -11,6 +11,7 @@ import { computed, ref, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToolTraceVisibility } from '@/composables/useToolTraceVisibility'
 import VoiceDialogueControls from './VoiceDialogueControls.vue'
+import MacroBar from '@/components/custom/MacroBar.vue' // JACKSON-FORK
 import { useMicRecorder } from '@/composables/useMicRecorder'
 import { useGlobalSpeech } from '@/composables/useSpeech'
 import { useVoiceDialogue } from '@/composables/useVoiceDialogue'
@@ -1159,6 +1160,7 @@ function isImage(type: string): boolean {
         </div>
       </template>
     </NModal>
+    <MacroBar /><!-- JACKSON-FORK -->
   </div>
 </template>
 
