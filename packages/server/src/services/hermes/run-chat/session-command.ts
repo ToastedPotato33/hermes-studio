@@ -68,6 +68,12 @@ interface BranchSessionSummary {
   workspace: string | null
 }
 
+interface MoaPresetInfo {
+  name: string
+  referenceModels: string[]
+  aggregator: string
+}
+
 const COMMAND_ALIASES: Record<string, CommandName> = {
   usage: 'usage',
   status: 'status',
@@ -115,7 +121,7 @@ export async function handleSessionCommand(
   ctx.socket.join(`session:${sessionId}`)
   ensureCommandSession(sessionId, command, ctx)
   const isKnownCommand = Boolean(COMMAND_ALIASES[command.rawName])
-  if (command.name !== 'plan' && command.name !== 'skill' && command.name !== 'learn' && command.name !== 'branch' && isKnownCommand) {
+  if (command.name !== 'plan' && command.name !== 'skill' && command.name !== 'learn' && command.name !== 'branch' && command.name !== 'moa' && isKnownCommand) {
     persistCommandMessage(sessionId, state, `/${command.rawName}${command.args ? ` ${command.args}` : ''}`)
   }
 
@@ -309,13 +315,14 @@ export async function handleSessionCommand(
       return
     }
 
-    const preset = await resolveDefaultMoaPreset(ctx.profile)
+    const presetInfo = await resolveDefaultMoaPresetInfo(ctx.profile)
+    const preset = presetInfo.name
     const next: QueuedRun = {
       queue_id: ctx.queueId || `queue_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
       input: command.args,
       displayInput: displayCommand,
       displayRole: 'command',
-      storageMessage: command.args,
+      storageMessage: displayCommand,
       model: preset,
       provider: 'moa',
       model_groups: ctx.model_groups,
@@ -338,6 +345,11 @@ export async function handleSessionCommand(
       started: true,
       message: `MoA one-shot queued with preset ${preset}.`,
       preset,
+      moa: {
+        preset,
+        reference_models: presetInfo.referenceModels,
+        aggregator: presetInfo.aggregator,
+      },
     })
     ctx.runQueuedItem(ctx.socket, sessionId, next, ctx.profile)
     return
@@ -877,18 +889,35 @@ export async function handleSessionCommand(
   }
 }
 
-async function resolveDefaultMoaPreset(profile: string): Promise<string> {
+function moaSlotLabel(slot: unknown): string {
+  if (!slot || typeof slot !== 'object') return ''
+  const data = slot as Record<string, unknown>
+  const provider = typeof data.provider === 'string' ? data.provider.trim() : ''
+  const model = typeof data.model === 'string' ? data.model.trim() : ''
+  if (provider && model) return `${provider}:${model}`
+  return provider || model
+}
+
+async function resolveDefaultMoaPresetInfo(profile: string): Promise<MoaPresetInfo> {
   try {
     const config = await readConfigYamlForProfile(profile)
     const moa = config?.moa
     const defaultPreset = typeof moa?.default_preset === 'string' ? moa.default_preset.trim() : ''
-    if (defaultPreset) return defaultPreset
     const presets = moa && typeof moa === 'object' && moa.presets && typeof moa.presets === 'object'
       ? Object.keys(moa.presets)
       : []
-    return presets[0] || 'default'
+    const name = defaultPreset || presets[0] || 'default'
+    const preset = moa && typeof moa === 'object' && moa.presets && typeof moa.presets === 'object'
+      ? (moa.presets as Record<string, unknown>)[name]
+      : undefined
+    const presetData = preset && typeof preset === 'object' ? preset as Record<string, unknown> : {}
+    const referenceModels = Array.isArray(presetData.reference_models)
+      ? presetData.reference_models.map(moaSlotLabel).filter(Boolean)
+      : []
+    const aggregator = moaSlotLabel(presetData.aggregator)
+    return { name, referenceModels, aggregator }
   } catch {
-    return 'default'
+    return { name: 'default', referenceModels: [], aggregator: '' }
   }
 }
 
