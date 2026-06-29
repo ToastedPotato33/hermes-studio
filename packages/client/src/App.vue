@@ -12,11 +12,14 @@ import { useAppStore } from '@/stores/hermes/app'
 import SessionSearchModal from '@/components/hermes/chat/SessionSearchModal.vue'
 import AuthEventListener from '@/components/auth/AuthEventListener.vue'
 import DefaultCredentialPrompt from '@/components/auth/DefaultCredentialPrompt.vue'
+import StatusPanel from '@/components/custom/StatusPanel.vue' // JACKSON-FORK
+import { useCustomUiStore } from '@/stores/custom/ui' // JACKSON-FORK
 
 const { isDark, isComic } = useTheme()
 const { t } = useI18n()
 const appStore = useAppStore()
 const route = useRoute()
+const customUiStore = useCustomUiStore() // JACKSON-FORK
 
 const themeOverrides = computed(() => getThemeOverrides(isDark.value, isComic.value))
 const naiveTheme = computed(() => isDark.value ? darkTheme : null)
@@ -85,9 +88,19 @@ useKeyboard()
               </button>
               <div v-if="!isLoginPage && showAppSidebar && appStore.sidebarOpen" class="mobile-backdrop" @click="appStore.closeSidebar" />
               <AppSidebar v-if="!isLoginPage && showAppSidebar" />
+              <!-- JACKSON-FORK: dual-pane status panel -->
+              <StatusPanel v-if="customUiStore.dualPaneEnabled && !isLoginPage" />
+              <!-- END JACKSON-FORK -->
               <main class="app-main">
                 <router-view />
               </main>
+              <!-- JACKSON-FORK: dual-pane toggle button -->
+              <button
+                class="dual-pane-toggle"
+                :title="customUiStore.dualPaneEnabled ? 'Exit dual-pane' : 'Dual-pane mode'"
+                @click="customUiStore.toggleDualPane()"
+              >⊞</button>
+              <!-- END JACKSON-FORK -->
             </div>
           </div>
           <SessionSearchModal />
@@ -152,4 +165,26 @@ useKeyboard()
   text-align: center;
   line-height: 1.4;
 }
+
+/* JACKSON-FORK: dual-pane toggle */
+.dual-pane-toggle {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 200;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #2a2a2a);
+  background: var(--bg-secondary, #111);
+  color: var(--text-tertiary, #666);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  &:hover { color: var(--text-primary, #eee); border-color: var(--accent-color, #6366f1); }
+}
+/* END JACKSON-FORK */
 </style>
