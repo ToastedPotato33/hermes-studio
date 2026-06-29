@@ -12,6 +12,7 @@ import LanguageSwitch from "@/components/layout/LanguageSwitch.vue";
 import ThemeSwitch from "@/components/layout/ThemeSwitch.vue";
 import VersionManagementModal from "@/components/layout/VersionManagementModal.vue";
 import { changelog } from "@/data/changelog";
+import ProfileTabBar from '@/components/custom/ProfileTabBar.vue' // JACKSON-FORK
 import { getStoredUsername, isStoredSuperAdmin } from "@/api/client";
 
 const { t } = useI18n();
@@ -285,6 +286,7 @@ function openVersionManagement() {
       </div>
     </nav>
 
+    <ProfileTabBar /><!-- JACKSON-FORK -->
     <ProfileSelector />
     <ModelSelector />
 
