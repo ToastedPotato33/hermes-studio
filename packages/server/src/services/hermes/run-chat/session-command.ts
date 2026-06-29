@@ -2,6 +2,7 @@ import type { Server, Socket } from 'socket.io'
 import { addMessage, clearSessionMessages, createBranchedSession, createSession, getSession, getSessionDetail, renameSession, updateSessionStats } from '../../../db/hermes/session-store'
 import { logger } from '../../logger'
 import type { AgentBridgeClient } from '../agent-bridge'
+import { readConfigYamlForProfile } from '../../config-helpers'
 import { flushBridgePendingToDb } from './bridge-message'
 import { buildDbHistory, estimateSnapshotAwareHistoryUsage, forceCompressBridgeHistory, getOrCreateSession, replaceState } from './compression'
 import { handleAbort } from './abort'
@@ -17,6 +18,7 @@ type CommandName =
   | 'skill'
   | 'learn'
   | 'plan'
+  | 'moa'
   | 'goal'
   | 'subgoal'
   | 'clear'
@@ -74,6 +76,7 @@ const COMMAND_ALIASES: Record<string, CommandName> = {
   skill: 'skill',
   learn: 'learn',
   plan: 'plan',
+  moa: 'moa',
   goal: 'goal',
   subgoal: 'subgoal',
   clear: 'clear',
@@ -291,6 +294,52 @@ export async function handleSessionCommand(
       terminal: !state.isWorking,
       message: result?.message || 'Learn command is not available.',
     })
+    return
+  }
+
+  if (command.name === 'moa') {
+    const displayCommand = `/${command.rawName}${command.args ? ` ${command.args}` : ''}`
+    if (!command.args) {
+      emitCommand({
+        ok: false,
+        action: 'moa',
+        terminal: !state.isWorking,
+        message: 'Usage: /moa <prompt>',
+      })
+      return
+    }
+
+    const preset = await resolveDefaultMoaPreset(ctx.profile)
+    const next: QueuedRun = {
+      queue_id: ctx.queueId || `queue_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      input: command.args,
+      displayInput: displayCommand,
+      displayRole: 'command',
+      storageMessage: command.args,
+      model: preset,
+      provider: 'moa',
+      model_groups: ctx.model_groups,
+      instructions: ctx.instructions,
+      profile: ctx.profile,
+      source: 'cli',
+      originSocketId: ctx.socket.id,
+      oneShotModel: true,
+    }
+
+    if (state.isWorking) {
+      state.queue.push(next)
+      emitQueuedState(ctx, sessionId, state)
+      return
+    }
+
+    emitCommand({
+      action: 'moa',
+      terminal: false,
+      started: true,
+      message: `MoA one-shot queued with preset ${preset}.`,
+      preset,
+    })
+    ctx.runQueuedItem(ctx.socket, sessionId, next, ctx.profile)
     return
   }
 
@@ -825,6 +874,21 @@ export async function handleSessionCommand(
       })
       return
     }
+  }
+}
+
+async function resolveDefaultMoaPreset(profile: string): Promise<string> {
+  try {
+    const config = await readConfigYamlForProfile(profile)
+    const moa = config?.moa
+    const defaultPreset = typeof moa?.default_preset === 'string' ? moa.default_preset.trim() : ''
+    if (defaultPreset) return defaultPreset
+    const presets = moa && typeof moa === 'object' && moa.presets && typeof moa.presets === 'object'
+      ? Object.keys(moa.presets)
+      : []
+    return presets[0] || 'default'
+  } catch {
+    return 'default'
   }
 }
 

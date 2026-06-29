@@ -394,6 +394,7 @@ export class ChatRunSocket {
       api_key?: string
       apiMode?: string
       api_mode?: string
+      one_shot_model?: boolean
       onEvent?: (event: string, payload: any) => void
     },
     profile: string,
@@ -626,6 +627,7 @@ export class ChatRunSocket {
       api_key: next.api_key,
       apiMode: next.apiMode,
       api_mode: next.api_mode,
+      one_shot_model: next.oneShotModel,
     }, next.profile || fallbackProfile, skipUserMessage)
   }
 
